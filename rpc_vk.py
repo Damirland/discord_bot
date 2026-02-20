@@ -9,7 +9,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-CLIENT_ID = os.getenv('DISCORD_CLIENT_ID') # Вставь свой ID приложения Discord
+CLIENT_ID = os.getenv('DISCORD_CLIENT_ID')
 
 app = Flask(__name__)
 CORS(app) 
@@ -21,16 +21,13 @@ last_playing_state = False
 last_history_song = None
 
 def connect_discord():
-    """Безопасное подключение к Discord с исправлением ошибок цикла событий"""
     global RPC
     try:
         new_loop = asyncio.new_event_loop()
         asyncio.set_event_loop(new_loop)
-        
         if RPC:
             try: RPC.close()
             except: pass
-            
         RPC = Presence(CLIENT_ID)
         RPC.connect()
         print("✅ Discord успешно подключен!")
@@ -42,26 +39,20 @@ def connect_discord():
     
 def format_discord_string(text, min_len=2, max_len=128):
     if not text: return "  "
-    # Убираем возможные переносы строк, если они просочились
     text = text.replace('\n', ' ').replace('\r', '').strip()
-    
-    if len(text) < min_len:
-        text = text + " " * (min_len - len(text))
-    if len(text) > max_len:
-        text = text[:max_len-3] + "..."
+    if len(text) < min_len: text = text + " " * (min_len - len(text))
+    if len(text) > max_len: text = text[:max_len-3] + "..."
     return text
 
 def make_progress_bar(percent, is_playing):
-    """Рисует полоску ▶──────⚪─────────"""
-    if 0 < percent <= 1: 
-        percent *= 100
-        
+    if 0 < percent <= 1: percent *= 100
     bar_size = 12 
     p = max(0, min(100, percent))
     pos = int((p / 100) * bar_size)
     if pos >= bar_size: pos = bar_size - 1
     
-    icon = "▶" if is_playing else "⏸"
+    # ТВОЙ ВАРИАНТ: Инвертированные значки
+    icon = "⏸" if is_playing else "▶"
     return f"{icon}{'─' * pos}⚪{'─' * (bar_size - pos - 1)}"
 
 def save_to_history(artist, title):
@@ -76,9 +67,6 @@ def receive_data():
         data = request.json
         if not data: return "No data", 400
         
-        # Печатаем в консоль для контроля
-        print(f"📊 {data['title']} | Время: {data['currentTime']} | Прогресс: {data['progress']:.2f}% | Играет: {data.get('isPlaying', False)}")
-
         now = time.time()
         artist_clean = format_discord_string(data.get('artist', 'Неизвестно'))
         title_clean = format_discord_string(data.get('title', 'Неизвестно'))
@@ -89,15 +77,14 @@ def receive_data():
         if RPC is None: return "Wait", 200
         
         is_new_song = (song_id != current_song)
-        is_state_changed = (is_playing != last_playing_state) # Узнаем, нажали ли паузу
+        is_state_changed = (is_playing != last_playing_state)
         
+        # Обновляем всегда, даже если на паузе
         if is_new_song or is_state_changed or (now - last_update_time) >= 10:
             if is_new_song:
-                # Пишем в историю только когда песня РЕАЛЬНО заиграла
                 if is_playing and song_id != last_history_song:
                     save_to_history(artist_clean, title_clean)
                     last_history_song = song_id
-                
                 display_progress = 0
                 display_time = "0:00"
             else:
@@ -105,25 +92,20 @@ def receive_data():
                 display_time = data.get('currentTime', '0:00')
             
             bar = make_progress_bar(display_progress, is_playing)
-            
             search_query = f"{artist_clean} {title_clean}"
             safe_url = f"https://vk.com/audio?q={urllib.parse.quote(search_query)}"
 
-            # --- МАГИЯ ЗДЕСЬ: ДОБАВИЛИ ВТОРУЮ КНОПКУ ---
             rpc_buttons = [
                 {"label": "Слушать в ВК", "url": safe_url},
                 {"label": "Код на GitHub", "url": "https://github.com/Damirland/discord_bot"}
             ]
             
-            # ДИНАМИЧЕСКИЙ ТЕКСТ: Меняем название и статус при паузе
             song_details = f"🎶 {title_clean}"
             small_txt = "В эфире"
-            
             if not is_playing:
                 song_details += " (На паузе)"
                 small_txt = "Остановлено"
             
-            # КРАСИВОЕ ОФОРМЛЕНИЕ 
             RPC.update(
                 state=format_discord_string(f"{bar} ({display_time})"),
                 details=format_discord_string(song_details),
@@ -131,20 +113,17 @@ def receive_data():
                 large_text=song_id,
                 small_image="https://i.imgur.com/vSpjnjG.png",
                 small_text=small_txt,
-                buttons=rpc_buttons # Отправляем обе кнопки в Discord
+                buttons=rpc_buttons
             )
-            
             current_song = song_id
             last_update_time = now
             last_playing_state = is_playing
                 
         return "OK", 200
-    
     except Exception as e:
         print(f"❌ АВАРИЯ В PYTHON: {e}")
         return "Error", 500
 
 if __name__ == '__main__':
     logging.getLogger('werkzeug').setLevel(logging.ERROR)
-    print(f"🚀 Сервер запущен! Кнопка GitHub добавлена. (ID: {CLIENT_ID})")
     app.run(port=8000)
