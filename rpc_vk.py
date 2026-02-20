@@ -92,12 +92,9 @@ def receive_data():
                 display_time = data.get('currentTime', '0:00')
             
             bar = make_progress_bar(display_progress, is_playing)
-            search_query = f"{artist_clean} {title_clean}"
-            safe_url = f"https://vk.com/audio?q={urllib.parse.quote(search_query)}"
 
             rpc_buttons = [
-                {"label": "Слушать в ВК", "url": safe_url},
-                {"label": "Код на GitHub", "url": "https://github.com/Damirland/discord_bot"}
+                {"label": "Код на GitHub", "url": "https://github.com/wisposhkaa/discord_bot"}
             ]
             
             song_details = f"🎶 {title_clean}"
