@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "VK Music to Discord",
+  "version": "1.0",
+  "description": "Слушает плеер ВК и передает в наш Python-скрипт",
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.vk.com/*"],
+      "js": ["content.js"]
+    }
+  ]
+}
