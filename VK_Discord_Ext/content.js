@@ -1,57 +1,79 @@
-console.log("Бот ВК-Discord: Режим VKUI активен!");
+console.log("Партнер Программиста: Активирован модуль спасения потерянных артистов!");
+
+function cleanText(str) {
+    if (!str) return "";
+    return str.replace(/\s+/g, ' ').trim();
+}
 
 setInterval(() => {
     try {
-        // 1. Ищем название и артиста через data-testid (самый надежный способ)
-        let titleEl = document.querySelector('[data-testid="audioplayeraudioinfo-title"]');
-        let artistEl = document.querySelector('[data-testid="audio-player-block-audio-artists"]');
+        let titleEl = document.querySelector('[data-testid="audioplayeraudioinfo-title"]') 
+                   || document.querySelector('[class*="AudioInfo__title"]');
+                   
+        let artistEl = document.querySelector('[data-testid="audio-player-block-audio-artists"]') 
+                    || document.querySelector('[class*="AudioInfo__artists"]');
 
-        if (titleEl && artistEl) {
-            // 2. Проверяем, играет ли музыка
-            // Если кнопка имеет текст "Приостановить" или иконку "pause", значит музыка играет
-            let stateBtn = document.querySelector('[data-testid="audio-player-controls-state-button"]');
-            let isPlaying = stateBtn ? stateBtn.innerText.includes("Приостановить") || !!document.querySelector('svg[class*="pause"]') : false;
-            
-            // 3. Обложка
-            let coverEl = document.querySelector('[data-testid="audioplayerplaybackbody-cover"] img');
-            let coverUrl = coverEl ? coverEl.src : "https://cdn-icons-png.flaticon.com/512/6028/6028590.png";
+        // Если нет даже названия песни - тогда точно ничего не играет, прерываемся
+        if (!titleEl) return;
 
-            // 4. ТЕКУЩЕЕ ВРЕМЯ
-            let currentStr = "0:00";
-            let timeEl = document.querySelector('[data-testid="audioplayerplaybackbody-progresstime"]');
-            if (timeEl) {
-                currentStr = timeEl.textContent.trim();
+        let cleanTitle = cleanText(titleEl.textContent);
+        let cleanArtist = artistEl ? cleanText(artistEl.textContent) : "";
+
+        // МАГИЯ СПАСЕНИЯ: Если ВК спрятал артиста
+        if (!cleanArtist) {
+            // Проверяем, не запихал ли ВК всё в одно название (например: "Сам - Noize mc")
+            if (cleanTitle.includes(' - ')) {
+                let parts = cleanTitle.split(' - ');
+                // Берем первую часть как артиста, вторую как песню (или наоборот, зависит от формата ВК, обычно Артист - Песня)
+                cleanArtist = parts[0].trim();
+                cleanTitle = parts.slice(1).join(' - ').trim();
+            } else {
+                // Если дефиса нет, просто ставим заглушку, чтобы Discord не ругался
+                cleanArtist = "Неизвестный исполнитель";
             }
-
-            // 5. ОБЩЕЕ ВРЕМЯ (Хак: ищем его в списке песен, так как в плеере его может не быть)
-            let totalStr = "0:00";
-            // Ищем строку песни, которая сейчас подсвечена как "играющая"
-            let playingRow = document.querySelector('.audio_row_playing');
-            if (playingRow) {
-                let durationEl = playingRow.querySelector('.audio_row__duration');
-                if (durationEl) totalStr = durationEl.textContent.trim();
-            }
-
-            // Если в списке не нашли, пробуем найти любое время в плеере, которое не является текущим
-            if (totalStr === "0:00") {
-                let allTimes = Array.from(document.querySelectorAll('[class*="progressTime"], [class*="duration"]'))
-                                    .map(el => el.textContent.trim())
-                                    .filter(t => /^\d{1,2}:\d{2}$/.test(t) && t !== currentStr);
-                if (allTimes.length > 0) totalStr = allTimes[0];
-            }
-
-            let data = {
-                title: titleEl.textContent.trim(),
-                artist: artistEl.textContent.trim(),
-                isPlaying: isPlaying,
-                cover: coverUrl,
-                timeInfo: `[${currentStr} / ${totalStr}]`
-            };
-
-            // Отправляем данные в background.js
-            chrome.runtime.sendMessage(data);
         }
+
+        let currentStr = "0:00";
+        let timeEl = document.querySelector('[data-testid="audioplayerplaybackbody-progresstime"] span')
+                  || document.querySelector('[class*="PlaybackProgressTime"] span');
+        if (timeEl) currentStr = timeEl.textContent.trim();
+
+        let progressPercent = 0;
+        let progressContainer = document.querySelector('[data-testid="audio-player-block-progress-bar"]')
+                             || document.querySelector('[class*="Progress"]');
+        
+        if (progressContainer) {
+            let fills = progressContainer.querySelectorAll('div[class*="vkitSlider__fill"]');
+            let validWidths = [];
+
+            for (let el of fills) {
+                let className = el.className || "";
+                if (className.includes('Transparent') || className.includes('Background')) continue;
+
+                if (el.style && el.style.width) {
+                    let w = parseFloat(el.style.width);
+                    if (!isNaN(w) && w > 0 && w <= 100) validWidths.push(w);
+                }
+            }
+            if (validWidths.length > 0) progressPercent = Math.min(...validWidths);
+        }
+
+        let stateBtn = document.querySelector('[data-testid="audio-player-controls-state-button"]')
+                    || document.querySelector('[class*="ControlsStateButton"]');
+        let isPlaying = stateBtn ? stateBtn.textContent.includes("Приостановить") : false;
+
+        let data = {
+            title: cleanTitle,
+            artist: cleanArtist,
+            isPlaying: isPlaying,
+            cover: document.querySelector('[data-testid="audioplayerplaybackbody-cover"] img')?.src || "",
+            currentTime: currentStr,
+            progress: progressPercent
+        };
+
+        chrome.runtime.sendMessage(data);
+
     } catch (e) {
-        console.error("Ошибка парсинга плеера:", e);
+        console.error("❌ ОШИБКА В JS:", e);
     }
 }, 2000);
