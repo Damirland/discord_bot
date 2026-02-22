@@ -101,7 +101,7 @@ def receive_data():
             small_txt = "В эфире"
             if not is_playing:
                 song_details += " (На паузе)"
-                small_txt = "Остановлено"
+                small_txt = "В эфире"
             
             RPC.update(
                 state=format_discord_string(f"{bar} ({display_time})"),
